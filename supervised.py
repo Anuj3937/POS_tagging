@@ -1,5 +1,5 @@
 # Global Variables definition
-tags = ['NN', 'NST', 'NNP', 'PRP', 'DEM', 'VM', 'VAUX', 'JJ', 'RB', 'PSP', 'RP', 'CC', 'WQ', 'QF', 'QC', 'QO', 'CL', 'INTF', 'INJ', 'NEG', 'UT', 'SYM', 'COMP', 'RDP', 'ECH', 'UNK', 'XC']
+tags = ['NN', 'NST', 'NNP', 'PRP', 'DEM', 'VM', 'VAUX', 'JJ', 'RB', 'PSP', 'RP', 'CC', 'WQ', 'QF', 'QC', 'QO', 'CL', 'INTF', 'INJ', 'NEG', 'UT', 'SYM', 'COMP', 'RDP', 'ECH', 'UNK', 'XC', 'START', 'END']
 
 def max_connect(x, y, viterbi_matrix, emission, transmission_matrix):
     max_val = -99999
@@ -24,7 +24,7 @@ def main():
     # Path of training files
     filepath = ["./data/hindi_training.txt", "./data/telugu_training.txt", "./data/kannada_training.txt", "./data/tamil_training.txt"]
     languages = ["hindi", "telugu", "kannada", "tamil"]
-    exclude = ["", "", "START", "END"]
+    exclude = ["", " ", "START", "END"]
     wordtypes = []
     tagscount = []
     
@@ -73,13 +73,14 @@ def main():
     row_id = -1
     for x in range(len(file_contents)):
         line = file_contents.pop(0).strip().split(' ')
-        if line[0] not in exclude:
-            col_id = wordtypes.index(line[0])
-            prev_row_id = row_id
-            row_id = tags.index(line[1])
-            emission_matrix[row_id][col_id] += 1
-            if prev_row_id != -1:
-                transmission_matrix[prev_row_id][row_id] += 1
+        if len(line) > 1 and line[0] not in exclude:
+            if line[1] in tags:  # Check if the tag exists in our tags list
+                col_id = wordtypes.index(line[0])
+                prev_row_id = row_id
+                row_id = tags.index(line[1])
+                emission_matrix[row_id][col_id] += 1
+                if prev_row_id != -1:
+                    transmission_matrix[prev_row_id][row_id] += 1
         else:
             row_id = -1
     
@@ -139,8 +140,7 @@ def main():
             for y in range(len(tags)):
                 if test_words[x] in wordtypes:
                     word_index = wordtypes.index(test_words[x])
-                    tag_index = tags.index(tags[y])
-                    emission = emission_matrix[tag_index][word_index]
+                    emission = emission_matrix[y][word_index]
                 else:
                     emission = 0.001
                 
@@ -168,13 +168,13 @@ def main():
         file_output = codecs.open("./output/"+ languages[int(sys.argv[1])] +"_tags.txt", 'a', 'utf-8')
         for i, x in enumerate(pos_tags):
             file_output.write(test_words[i] + "_" + tags[x] + " ")
-        file_output.write(" ._.\n")
+        file_output.write("._.\n")
     
     f.close()
     file_output.close()
     file_test.close()
     
-        print(time.time() - start_time, "seconds for testing 100 Sentences")
+    print(time.time() - start_time, "seconds for testing 100 Sentences")
     print("\nKindly check ./output/" + languages[int(sys.argv[1])] + "_tags.txt for POS tags")
 
 if __name__ == "__main__":
