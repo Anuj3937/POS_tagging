@@ -5,3 +5,4 @@ scikit-learn
 matplotlib
 seaborn
 nltk
+joblib>=1.2.0

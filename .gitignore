@@ -1,3 +1,5 @@
 __pycache__/
-
-
+confusion_matrix.png
+pos_tagger_model.joblib
+pos_tagger_vectorizer.joblib
+tag_set.txt
