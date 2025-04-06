@@ -4,6 +4,7 @@ from datasets import load_dataset
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import seaborn as sns
 import nltk
@@ -264,26 +265,66 @@ def main():
         print(f"Feature vectorization completed in {time.time() - start_time:.2f} seconds")
         print(f"Number of features: {X_train_vec.shape[1]}")
         
-        # Train model with optimized parameters
-        print("Training model...")
+        # Split data into train and validation sets for early stopping
+        X_train_split, X_val, y_train_split, y_val = train_test_split(
+            X_train_vec, y_train, test_size=0.1, random_state=42, stratify=y_train
+        )
+        
+        # Train model with early stopping
+        print("Training model with early stopping...")
         start_time = time.time()
         
-        # Use LogisticRegression with optimized parameters for better accuracy
+        # Initialize model with warm_start for incremental fitting
         model = LogisticRegression(
             C=1.0,  # Regularization strength
             solver='saga',  # Efficient for large datasets
             penalty='l2',  # Ridge regularization
-            max_iter=200,  # Reduced from 1000
             tol=1e-4,  # Convergence tolerance
             n_jobs=-1,  # Use all cores
             random_state=42,  # For reproducibility
             class_weight='balanced',  # Handle class imbalance
+            warm_start=True,  # Enable incremental fitting
             verbose=1  # Show progress
         )
         
+        # Early stopping parameters
+        max_epochs = 50  # Maximum number of epochs
+        patience = 5  # Number of epochs with no improvement to wait
+        iterations_per_epoch = 4  # Number of mini-iterations per epoch
+        best_val_accuracy = 0
+        patience_counter = 0
+        
+        print("Starting incremental training with early stopping...")
+        for epoch in range(max_epochs):
+            # Train for a few iterations
+            model.set_params(max_iter=iterations_per_epoch)
+            model.fit(X_train_split, y_train_split)
+            
+            # Evaluate on validation set
+            val_accuracy = accuracy_score(y_val, model.predict(X_val))
+            print(f"Epoch {epoch+1}/{max_epochs}, Validation accuracy: {val_accuracy:.4f}")
+            
+            # Check for improvement
+            if val_accuracy > best_val_accuracy:
+                best_val_accuracy = val_accuracy
+                patience_counter = 0
+                print(f"Improved validation accuracy: {best_val_accuracy:.4f}")
+            else:
+                patience_counter += 1
+                print(f"No improvement for {patience_counter} epochs")
+            
+            # Early stopping
+            if patience_counter >= patience:
+                print(f"Early stopping at epoch {epoch+1}")
+                break
+        
+        # Final training on full dataset
+        print("Final training on full dataset...")
+        model.set_params(max_iter=200)  # Set max_iter for final training
         model.fit(X_train_vec, y_train)
         
         print(f"Model training completed in {time.time() - start_time:.2f} seconds")
+        print(f"Best validation accuracy: {best_val_accuracy:.4f}")
         
         # Save the model and vectorizer
         joblib.dump(model, MODEL_PATH)
