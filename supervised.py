@@ -164,14 +164,20 @@ def train_model(filepath):
     print("Loading training data...")
     # Open training file to read the contents
     try:
-        f = codecs.open(filepath, 'r', encoding='utf-8')
-        file_contents = f.readlines()
-        f.close()
+        if not os.path.exists(filepath):
+            print(f"Warning: File not found: {filepath}")
+            # Return empty model if file doesn't exist
+            return [], [[]], [[]]
+            
+        with open(filepath, 'r', encoding='utf-8') as f:
+            file_contents = f.readlines()
     except UnicodeDecodeError:
-        # Try with a different encoding if utf-8 fails
-        f = codecs.open(filepath, 'r', encoding='latin-1')
-        file_contents = f.readlines()
-        f.close()
+        try:
+            with open(filepath, 'r', encoding='latin-1') as f:
+                file_contents = f.readlines()
+        except Exception as e:
+            print(f"Error reading file {filepath}: {e}")
+            return [], [[]], [[]]
     
     # Initialize count of each tag to Zero's
     for x in range(len(tags)):
@@ -199,6 +205,17 @@ def train_model(filepath):
     
     print(f"Found {len(wordtypes)} unique words and {sum(tagscount)} tagged tokens in training data")
     
+    # If no words or tags found, return empty model
+    if len(wordtypes) == 0 or sum(tagscount) == 0:
+        print(f"Warning: No valid data found in {filepath}")
+        # Initialize with small default values to avoid division by zero
+        for i in range(len(tags)):
+            tagscount[i] = 1  # Add a small count to each tag
+        
+        # Add a dummy word if needed
+        if len(wordtypes) == 0:
+            wordtypes.append("DUMMY")
+    
     # Declare variables for emission and transmission matrix
     emission_matrix = []
     transmission_matrix = []
@@ -216,15 +233,19 @@ def train_model(filepath):
             transmission_matrix[x].append(0)
     
     print("Building emission and transmission matrices...")
-    # Open training file to update emission and transmission matrix
+    # Process file contents again to update emission and transmission matrix
     try:
-        f = codecs.open(filepath, 'r', encoding='utf-8')
-        file_contents = f.readlines()
-        f.close()
+        if os.path.exists(filepath):
+            with open(filepath, 'r', encoding='utf-8') as f:
+                file_contents = f.readlines()
     except UnicodeDecodeError:
-        f = codecs.open(filepath, 'r', encoding='latin-1')
-        file_contents = f.readlines()
-        f.close()
+        try:
+            with open(filepath, 'r', encoding='latin-1') as f:
+                file_contents = f.readlines()
+        except Exception as e:
+            print(f"Error reading file {filepath}: {e}")
+            # Continue with empty file_contents
+            file_contents = []
     
     # Update emission and transmission matrix with appropriate counts
     row_id = -1
@@ -278,15 +299,22 @@ def estimate_accuracy(filepath):
     """
     print("Estimating model accuracy using cross-validation...")
     
+    # Check if file exists
+    if not os.path.exists(filepath):
+        print(f"Warning: File not found: {filepath}")
+        return 0.0
+    
     # Read training data
     try:
-        f = codecs.open(filepath, 'r', encoding='utf-8')
-        file_contents = f.readlines()
-        f.close()
+        with open(filepath, 'r', encoding='utf-8') as f:
+            file_contents = f.readlines()
     except UnicodeDecodeError:
-        f = codecs.open(filepath, 'r', encoding='latin-1')
-        file_contents = f.readlines()
-        f.close()
+        try:
+            with open(filepath, 'r', encoding='latin-1') as f:
+                file_contents = f.readlines()
+        except Exception as e:
+            print(f"Error reading file {filepath}: {e}")
+            return 0.0
     
     # Group lines into sentences
     sentences = []
@@ -313,6 +341,11 @@ def estimate_accuracy(filepath):
     if current_sentence:
         sentences.append(current_sentence)
     
+    # If no sentences found, return 0 accuracy
+    if not sentences:
+        print(f"Warning: No valid sentences found in {filepath}")
+        return 0.0
+    
     # Shuffle sentences
     random.shuffle(sentences)
     
@@ -320,6 +353,11 @@ def estimate_accuracy(filepath):
     split_idx = int(len(sentences) * 0.8)
     train_sentences = sentences[:split_idx]
     val_sentences = sentences[split_idx:]
+    
+    # If either split is empty, use all data for both
+    if not train_sentences or not val_sentences:
+        train_sentences = sentences
+        val_sentences = sentences
     
     # Create training data file
     train_data = []
@@ -331,11 +369,17 @@ def estimate_accuracy(filepath):
     
     # Write to temporary file
     temp_train_file = "temp_train.txt"
-    with codecs.open(temp_train_file, 'w', encoding='utf-8') as f:
+    with open(temp_train_file, 'w', encoding='utf-8') as f:
         f.write('\n'.join(train_data))
     
     # Train model on training split
     wordtypes, emission_matrix, transmission_matrix = train_model(temp_train_file)
+    
+    # If model training failed, return 0 accuracy
+    if not wordtypes:
+        if os.path.exists(temp_train_file):
+            os.remove(temp_train_file)
+        return 0.0
     
     # Evaluate on validation split
     total_words = 0
@@ -475,4 +519,5 @@ if __name__ == "__main__":
         print(f"Couldn't find the module - {error}, kindly install before proceeding.")
     except Exception as e:
         print(f"An error occurred: {e}")
-        print("Please make sure all required files exist in the data directory.")
+        print("Please make sure all required files exist in the current directory.")
+
