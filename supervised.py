@@ -123,6 +123,28 @@ def tag_sentence(sentence, wordtypes, emission_matrix, transmission_matrix):
     
     return tagged_words
 
+def normalize_line(line):
+    """
+    Normalize line to handle inconsistent spacing in the training data
+    """
+    line = line.strip()
+    if not line:
+        return ""
+    
+    # Handle cases where there might be multiple spaces or tabs
+    parts = [part for part in line.split() if part]
+    
+    # If we have exactly two parts, return word and tag
+    if len(parts) == 2:
+        return f"{parts[0]} {parts[1]}"
+    # If we have more parts, assume the last one is the tag and the rest is the word
+    elif len(parts) > 2:
+        word = ' '.join(parts[:-1])
+        tag = parts[-1]
+        return f"{word} {tag}"
+    
+    return line
+
 def train_model(filepath):
     """
     Train the POS tagging model using the given training file
@@ -141,8 +163,15 @@ def train_model(filepath):
     
     print("Loading training data...")
     # Open training file to read the contents
-    f = codecs.open(filepath, 'r', encoding='utf-8')
-    file_contents = f.readlines()
+    try:
+        f = codecs.open(filepath, 'r', encoding='utf-8')
+        file_contents = f.readlines()
+        f.close()
+    except UnicodeDecodeError:
+        # Try with a different encoding if utf-8 fails
+        f = codecs.open(filepath, 'r', encoding='latin-1')
+        file_contents = f.readlines()
+        f.close()
     
     # Initialize count of each tag to Zero's
     for x in range(len(tags)):
@@ -150,13 +179,13 @@ def train_model(filepath):
     
     # Calculate count of each tag in the training corpus and also the wordtypes in the corpus
     for line in file_contents:
-        line = line.strip()
+        line = normalize_line(line)
         if not line:
             continue
             
         parts = line.split()
-        if len(parts) == 2:
-            word, tag = parts
+        if len(parts) >= 2:
+            word, tag = parts[0], parts[-1]
             
             # Skip sentence markers
             if word in ["<s>", "</s>"]:
@@ -167,8 +196,6 @@ def train_model(filepath):
                 
             if tag in tags and tag not in exclude:
                 tagscount[tags.index(tag)] += 1
-    
-    f.close()
     
     print(f"Found {len(wordtypes)} unique words and {sum(tagscount)} tagged tokens in training data")
     
@@ -190,19 +217,25 @@ def train_model(filepath):
     
     print("Building emission and transmission matrices...")
     # Open training file to update emission and transmission matrix
-    f = codecs.open(filepath, 'r', encoding='utf-8')
-    file_contents = f.readlines()
+    try:
+        f = codecs.open(filepath, 'r', encoding='utf-8')
+        file_contents = f.readlines()
+        f.close()
+    except UnicodeDecodeError:
+        f = codecs.open(filepath, 'r', encoding='latin-1')
+        file_contents = f.readlines()
+        f.close()
     
     # Update emission and transmission matrix with appropriate counts
     row_id = -1
     for line in file_contents:
-        line = line.strip()
+        line = normalize_line(line)
         if not line:
             continue
             
         parts = line.split()
-        if len(parts) == 2:
-            word, tag = parts
+        if len(parts) >= 2:
+            word, tag = parts[0], parts[-1]
             
             # Skip sentence markers
             if word in ["<s>", "</s>"]:
@@ -218,17 +251,18 @@ def train_model(filepath):
                 if prev_row_id != -1:
                     transmission_matrix[prev_row_id][row_id] += 1
     
+    # Add smoothing to avoid zero probabilities
+    smoothing_value = 0.001
+    
     # Divide each entry in emission matrix by appropriate tag count to store probabilities
     for x in range(len(tags)):
         for y in range(len(wordtypes)):
-            if tagscount[x] != 0:
-                emission_matrix[x][y] = float(emission_matrix[x][y]) / tagscount[x]
+            emission_matrix[x][y] = (emission_matrix[x][y] + smoothing_value) / (tagscount[x] + smoothing_value * len(wordtypes))
     
     # Divide each entry in transmission matrix by appropriate tag count to store probabilities
     for x in range(len(tags)):
         for y in range(len(tags)):
-            if tagscount[x] != 0:
-                transmission_matrix[x][y] = float(transmission_matrix[x][y]) / tagscount[x]
+            transmission_matrix[x][y] = (transmission_matrix[x][y] + smoothing_value) / (tagscount[x] + smoothing_value * len(tags))
     
     return wordtypes, emission_matrix, transmission_matrix
 
@@ -245,22 +279,27 @@ def estimate_accuracy(filepath):
     print("Estimating model accuracy using cross-validation...")
     
     # Read training data
-    f = codecs.open(filepath, 'r', encoding='utf-8')
-    file_contents = f.readlines()
-    f.close()
+    try:
+        f = codecs.open(filepath, 'r', encoding='utf-8')
+        file_contents = f.readlines()
+        f.close()
+    except UnicodeDecodeError:
+        f = codecs.open(filepath, 'r', encoding='latin-1')
+        file_contents = f.readlines()
+        f.close()
     
     # Group lines into sentences
     sentences = []
     current_sentence = []
     
     for line in file_contents:
-        line = line.strip()
+        line = normalize_line(line)
         if not line:
             continue
             
         parts = line.split()
-        if len(parts) == 2:
-            word, tag = parts
+        if len(parts) >= 2:
+            word, tag = parts[0], parts[-1]
             
             if word == "<s>":
                 current_sentence = []
@@ -319,7 +358,8 @@ def estimate_accuracy(filepath):
                     correct_tags += 1
     
     # Clean up temporary file
-    os.remove(temp_train_file)
+    if os.path.exists(temp_train_file):
+        os.remove(temp_train_file)
     
     # Calculate accuracy
     accuracy = correct_tags / total_words if total_words > 0 else 0
@@ -330,85 +370,103 @@ def main():
     
     # Language options
     languages = {
-        "1": {"name": "Hindi", "train": "./data/hindi_training.txt", "test": "./data/hindi_testing.txt"},
-        "2": {"name": "Kannada", "train": "./data/kannada_training.txt", "test": "./data/kannada_testing.txt"},
-        "3": {"name": "Tamil", "train": "./data/tamil_training.txt", "test": "./data/tamil_testing.txt"},
-        "4": {"name": "Telugu", "train": "./data/telugu_training.txt", "test": "./data/telugu_testing.txt"}
+        "1": {"name": "Hindi", "train": "./data/hindi_training.txt"},
+        "2": {"name": "Kannada", "train": "./data/kannada_training.txt"},
+        "3": {"name": "Tamil", "train": "./data/tamil_training.txt"},
+        "4": {"name": "Telugu", "train": "./data/telugu_training.txt"},
+        "5": {"name": "Marwari", "train": "./data/marwari_training.txt"},
+        "6": {"name": "Marathi", "train": "./data/marathi_training.txt"},
+        "7": {"name": "Punjabi", "train": "./data/punjabi_training.txt"},
+        "8": {"name": "Gujarati", "train": "./data/gujarati_training.txt"},
+        "9": {"name": "Malayalam", "train": "./data/malayalam_training.txt"},
+        "10": {"name": "Bengali", "train": "./data/bengali_training.txt"}
     }
     
     # Display language options
     print("Select a language for POS tagging:")
     for key, lang in languages.items():
         print(f"{key}. {lang['name']}")
+    print("11. Evaluate all languages")
     
     # Get user choice
-    choice = input("Enter your choice (1-4): ")
+    choice = input("Enter your choice (1-11): ")
     
-    if choice not in languages:
-        print("Invalid choice. Defaulting to Hindi.")
-        choice = "1"
-    
-    selected_language = languages[choice]
-    print(f"\nSelected language: {selected_language['name']}")
-    
-    # Train the model
-    train_start_time = time.time()
-    wordtypes, emission_matrix, transmission_matrix = train_model(selected_language['train'])
-    training_time = time.time() - train_start_time
-    print(f"Training completed in {training_time:.2f} seconds")
-    
-    # Estimate model accuracy
-    accuracy = estimate_accuracy(selected_language['train'])
-    print(f"Estimated model accuracy: {accuracy:.4f}")
-    
-    # Process test data
-    print("\nProcessing test data...")
-    test_start_time = time.time()
-    
-    # Open the testing file to read test sentences
-    try:
-        file_test = codecs.open(selected_language['test'], 'r', encoding='utf-8')
-        test_input = file_test.readlines()
-        file_test.close()
+    if choice == "11":
+        # Evaluate all languages
+        print("\nEvaluating all languages...")
+        results = {}
         
-        # Count number of test sentences
-        test_count = len([line for line in test_input if line.strip()])
-        print(f"Found {test_count} test sentences")
-        
-        testing_time = time.time() - test_start_time
-        print(f"Testing completed in {testing_time:.2f} seconds")
-    except FileNotFoundError:
-        print(f"Warning: Test file {selected_language['test']} not found")
-    
-    # Interactive mode for user input
-    print("\n" + "="*80)
-    print(f"{selected_language['name']} POS Tagger Interactive Mode")
-    print("Enter a sentence to get POS tags. Type 'exit' to quit.")
-    print("="*80)
-    
-    while True:
-        user_input = input("\nEnter a sentence: ")
-        
-        if user_input.lower() == 'exit':
-            print("Exiting program. Goodbye!")
-            break
-        
-        if not user_input.strip():
-            print("Please enter a valid sentence.")
-            continue
-        
-        # Get our model's tags
-        model_tagged = tag_sentence(user_input, wordtypes, emission_matrix, transmission_matrix)
-        
-        # Display the results in a formatted table
-        print("\nWord\t\tTag\t\tDescription")
-        print("-" * 60)
-        for word, tag, description in model_tagged:
-            # Adjust spacing based on word length
-            word_spacing = "\t\t" if len(word) < 8 else "\t"
-            tag_spacing = "\t\t" if len(tag) < 8 else "\t"
+        for key, lang in languages.items():
+            print(f"\n{'-'*80}")
+            print(f"Processing {lang['name']}...")
             
-            print(f"{word}{word_spacing}{tag}{tag_spacing}{description}")
+            try:
+                # Train the model and estimate accuracy
+                accuracy = estimate_accuracy(lang['train'])
+                results[lang['name']] = accuracy
+                print(f"{lang['name']} model accuracy: {accuracy:.4f}")
+            except Exception as e:
+                print(f"Error processing {lang['name']}: {e}")
+                results[lang['name']] = "Error"
+        
+        # Display summary of results
+        print(f"\n{'-'*80}")
+        print("Summary of Model Accuracies:")
+        print(f"{'-'*80}")
+        print(f"{'Language':<15} | {'Accuracy':<10}")
+        print(f"{'-'*15} | {'-'*10}")
+        
+        for lang, acc in results.items():
+            if isinstance(acc, float):
+                print(f"{lang:<15} | {acc:.4f}")
+            else:
+                print(f"{lang:<15} | {acc}")
+        
+    elif choice in languages:
+        selected_language = languages[choice]
+        print(f"\nSelected language: {selected_language['name']}")
+        
+        # Train the model
+        train_start_time = time.time()
+        wordtypes, emission_matrix, transmission_matrix = train_model(selected_language['train'])
+        training_time = time.time() - train_start_time
+        print(f"Training completed in {training_time:.2f} seconds")
+        
+        # Estimate model accuracy
+        accuracy = estimate_accuracy(selected_language['train'])
+        print(f"Estimated model accuracy: {accuracy:.4f}")
+        
+        # Interactive mode for user input
+        print("\n" + "="*80)
+        print(f"{selected_language['name']} POS Tagger Interactive Mode")
+        print("Enter a sentence to get POS tags. Type 'exit' to quit.")
+        print("="*80)
+        
+        while True:
+            user_input = input("\nEnter a sentence: ")
+            
+            if user_input.lower() == 'exit':
+                print("Exiting program. Goodbye!")
+                break
+            
+            if not user_input.strip():
+                print("Please enter a valid sentence.")
+                continue
+            
+            # Get our model's tags
+            model_tagged = tag_sentence(user_input, wordtypes, emission_matrix, transmission_matrix)
+            
+            # Display the results in a formatted table
+            print("\nWord\t\tTag\t\tDescription")
+            print("-" * 60)
+            for word, tag, description in model_tagged:
+                # Adjust spacing based on word length
+                word_spacing = "\t\t" if len(word) < 8 else "\t"
+                tag_spacing = "\t\t" if len(tag) < 8 else "\t"
+                
+                print(f"{word}{word_spacing}{tag}{tag_spacing}{description}")
+    else:
+        print("Invalid choice. Exiting program.")
 
 if __name__ == "__main__":
     try:
