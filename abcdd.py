@@ -1,12 +1,9 @@
-import streamlit as st
 import codecs
 import os
+import sys
 import time
 import random
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import altair as alt
 
 # Global Variables definition
 tags = ['NN', 'NST', 'NNP', 'PRP', 'DEM', 'VM', 'VAUX', 'JJ', 'RB', 'PSP', 'RP', 'CC', 'WQ', 'QF', 'QC', 'QO', 'CL', 'INTF', 'INJ', 'NEG', 'UT', 'SYM', 'COMP', 'RDP', 'ECH', 'UNK', 'XC', 'START', 'END']
@@ -164,11 +161,11 @@ def train_model(filepath):
     wordtypes = []
     tagscount = []
     
-    st.text("Loading training data...")
+    print("Loading training data...")
     # Open training file to read the contents
     try:
         if not os.path.exists(filepath):
-            st.warning(f"Warning: File not found: {filepath}")
+            print(f"Warning: File not found: {filepath}")
             # Return empty model if file doesn't exist
             return [], [[]], [[]]
             
@@ -179,7 +176,7 @@ def train_model(filepath):
             with open(filepath, 'r', encoding='latin-1') as f:
                 file_contents = f.readlines()
         except Exception as e:
-            st.error(f"Error reading file {filepath}: {e}")
+            print(f"Error reading file {filepath}: {e}")
             return [], [[]], [[]]
     
     # Initialize count of each tag to Zero's
@@ -206,11 +203,11 @@ def train_model(filepath):
             if tag in tags and tag not in exclude:
                 tagscount[tags.index(tag)] += 1
     
-    st.text(f"Found {len(wordtypes)} unique words and {sum(tagscount)} tagged tokens in training data")
+    print(f"Found {len(wordtypes)} unique words and {sum(tagscount)} tagged tokens in training data")
     
     # If no words or tags found, return empty model
     if len(wordtypes) == 0 or sum(tagscount) == 0:
-        st.warning(f"Warning: No valid data found in {filepath}")
+        print(f"Warning: No valid data found in {filepath}")
         # Initialize with small default values to avoid division by zero
         for i in range(len(tags)):
             tagscount[i] = 1  # Add a small count to each tag
@@ -235,7 +232,7 @@ def train_model(filepath):
         for y in range(len(tags)):
             transmission_matrix[x].append(0)
     
-    st.text("Building emission and transmission matrices...")
+    print("Building emission and transmission matrices...")
     # Process file contents again to update emission and transmission matrix
     try:
         if os.path.exists(filepath):
@@ -246,7 +243,7 @@ def train_model(filepath):
             with open(filepath, 'r', encoding='latin-1') as f:
                 file_contents = f.readlines()
         except Exception as e:
-            st.error(f"Error reading file {filepath}: {e}")
+            print(f"Error reading file {filepath}: {e}")
             # Continue with empty file_contents
             file_contents = []
     
@@ -300,11 +297,11 @@ def estimate_accuracy(filepath):
     Returns:
         accuracy: Estimated accuracy of the model
     """
-    st.text("Estimating model accuracy using cross-validation...")
+    print("Estimating model accuracy using cross-validation...")
     
     # Check if file exists
     if not os.path.exists(filepath):
-        st.warning(f"Warning: File not found: {filepath}")
+        print(f"Warning: File not found: {filepath}")
         return 0.0
     
     # Read training data
@@ -316,7 +313,7 @@ def estimate_accuracy(filepath):
             with open(filepath, 'r', encoding='latin-1') as f:
                 file_contents = f.readlines()
         except Exception as e:
-            st.error(f"Error reading file {filepath}: {e}")
+            print(f"Error reading file {filepath}: {e}")
             return 0.0
     
     # Group lines into sentences
@@ -346,7 +343,7 @@ def estimate_accuracy(filepath):
     
     # If no sentences found, return 0 accuracy
     if not sentences:
-        st.warning(f"Warning: No valid sentences found in {filepath}")
+        print(f"Warning: No valid sentences found in {filepath}")
         return 0.0
     
     # Shuffle sentences
@@ -412,288 +409,114 @@ def estimate_accuracy(filepath):
     accuracy = correct_tags / total_words if total_words > 0 else 0
     return accuracy
 
-# Streamlit UI
 def main():
-    st.set_page_config(
-        page_title="POS Tagger App",
-        page_icon="🏷️",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
-
-    # Custom CSS
-    st.markdown("""
-    <style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #1E88E5;
-        text-align: center;
-        margin-bottom: 1rem;
-    }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #26A69A;
-        margin-bottom: 1rem;
-    }
-    .highlight {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-    }
-    .tag {
-        font-weight: bold;
-        color: #1E88E5;
-    }
-    .tag-description {
-        color: #616161;
-        font-style: italic;
-    }
-    .word-container {
-        display: inline-block;
-        margin: 0.3rem;
-        padding: 0.5rem;
-        border-radius: 0.3rem;
-        background-color: #E3F2FD;
-        border: 1px solid #90CAF9;
-    }
-    .footer {
-        text-align: center;
-        margin-top: 2rem;
-        color: #9E9E9E;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Header
-    st.markdown("<h1 class='main-header'>Parts of Speech (POS) Tagger</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>An interactive tool for analyzing the grammatical structure of sentences</p>", unsafe_allow_html=True)
-
-    # Sidebar
-    st.sidebar.image("https://img.icons8.com/color/96/000000/grammar.png", width=100)
-    st.sidebar.title("POS Tagger Settings")
+    start_time = time.time()
     
-    # Language selection
+    # Language options
     languages = {
-        "Hindi": "./data/hindi_training.txt",
-        "Kannada": "./data/kannada_training.txt",
-        "Tamil": "./data/tamil_training.txt",
-        "Telugu": "./data/telugu_training.txt",
-        "Marwari": "./data/marwari_training.txt",
-        "Marathi": "./data/marathi_training.txt",
-        "Punjabi": "./data/punjabi_training.txt",
-        "Gujarati": "./data/gujarati_training.txt",
-        "Malayalam": "./data/malayalam_training.txt",
-        "Bengali": "./data/bengali_training.txt"
+        "1": {"name": "Hindi", "train": "./data/hindi_training.txt"},
+        "2": {"name": "Kannada", "train": "./data/kannada_training.txt"},
+        "3": {"name": "Tamil", "train": "./data/tamil_training.txt"},
+        "4": {"name": "Telugu", "train": "./data/telugu_training.txt"},
+        "5": {"name": "Marwari", "train": "./data/marwari_training.txt"},
+        "6": {"name": "Marathi", "train": "./data/marathi_training.txt"},
+        "7": {"name": "Punjabi", "train": "./data/punjabi_training.txt"},
+        "8": {"name": "Gujarati", "train": "./data/gujarati_training.txt"},
+        "9": {"name": "Malayalam", "train": "./data/malayalam_training.txt"},
+        "10": {"name": "Bengali", "train": "./data/bengali_training.txt"}
     }
     
-    selected_language = st.sidebar.selectbox("Select Language", list(languages.keys()))
+    # Display language options
+    print("Select a language for POS tagging:")
+    for key, lang in languages.items():
+        print(f"{key}. {lang['name']}")
+    print("11. Evaluate all languages")
     
-    # Upload custom training data option
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Custom Training Data")
-    uploaded_file = st.sidebar.file_uploader("Upload your own training data", type=["txt"])
+    # Get user choice
+    choice = input("Enter your choice (1-11): ")
     
-    if uploaded_file is not None:
-        # Save the uploaded file
-        with open("uploaded_training.txt", "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        training_file = "uploaded_training.txt"
-        st.sidebar.success("Custom training data uploaded successfully!")
-    else:
-        training_file = languages[selected_language]
-    
-    # Model training section
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Model Training")
-    # Train model button
-    if st.sidebar.button("Train Model"):
-        with st.spinner("Training model..."):
-            wordtypes, emission_matrix, transmission_matrix = train_model(training_file)
+    if choice == "11":
+        # Evaluate all languages
+        print("\nEvaluating all languages...")
+        results = {}
+        
+        for key, lang in languages.items():
+            print(f"\n{'-'*80}")
+            print(f"Processing {lang['name']}...")
             
-            # Store model in session state
-            st.session_state.wordtypes = wordtypes
-            st.session_state.emission_matrix = emission_matrix
-            st.session_state.transmission_matrix = transmission_matrix
-            
-            # Estimate accuracy
-            accuracy = estimate_accuracy(training_file)
-            st.session_state.accuracy = accuracy
-            
-            st.sidebar.success(f"Model trained successfully! Estimated accuracy: {accuracy:.2%}")
-    
-    # About section in sidebar
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("About")
-    st.sidebar.info(
-        "This app uses a Hidden Markov Model with the Viterbi algorithm to perform Parts of Speech (POS) tagging. "
-        "It can analyze text in multiple Indian languages to identify grammatical components."
-    )
-    
-    # Main content area
-    tabs = st.tabs(["Tagger", "Tag Information", "Model Information"])
-    
-    with tabs[0]:
-        st.markdown("<h2 class='sub-header'>Text Analysis</h2>", unsafe_allow_html=True)
+            try:
+                # Train the model and estimate accuracy
+                accuracy = estimate_accuracy(lang['train'])
+                results[lang['name']] = accuracy
+                print(f"{lang['name']} model accuracy: {accuracy:.4f}")
+            except Exception as e:
+                print(f"Error processing {lang['name']}: {e}")
+                results[lang['name']] = "Error"
         
-        # Example sentences based on selected language
-        example_sentences = {
-            "Hindi": "मैं आज बाजार जाऊंगा",
-            "Kannada": "ನಾನು ಇಂದು ಮಾರುಕಟ್ಟೆಗೆ ಹೋಗುತ್ತೇನೆ",
-            "Tamil": "நான் இன்று சந்தைக்குச் செல்வேன்",
-            "Telugu": "నేను ఈరోజు మార్కెట్కు వెళతాను",
-            "Marwari": "म्हें आज बजार जावुंला",
-            "Marathi": "मी आज बाजारात जाईन",
-            "Punjabi": "ਮੈਂ ਅੱਜ ਬਾਜ਼ਾਰ ਜਾਵਾਂਗਾ",
-            "Gujarati": "હું આજે બજારમાં જઈશ",
-            "Malayalam": "ഞാൻ ഇന്ന് മാർക്കറ്റിൽ പോകും",
-            "Bengali": "আমি আজ বাজারে যাব"
-        }
+        # Display summary of results
+        print(f"\n{'-'*80}")
+        print("Summary of Model Accuracies:")
+        print(f"{'-'*80}")
+        print(f"{'Language':<15} | {'Accuracy':<10}")
+        print(f"{'-'*15} | {'-'*10}")
         
-        default_example = example_sentences.get(selected_language, "Type your sentence here")
-        
-        # User input
-        user_input = st.text_area("Enter text for POS tagging:", value=default_example, height=100)
-        
-        col1, col2 = st.columns([1, 1])
-        
-        with col1:
-            tag_button = st.button("Tag Text", key="tag_button", use_container_width=True)
-        
-        with col2:
-            clear_button = st.button("Clear Results", key="clear_button", use_container_width=True)
-            
-        if clear_button:
-            if 'tagged_results' in st.session_state:
-                del st.session_state.tagged_results
-        
-        # Process the text when the button is clicked
-        if tag_button and user_input:
-            if 'wordtypes' not in st.session_state or 'emission_matrix' not in st.session_state or 'transmission_matrix' not in st.session_state:
-                st.warning("Please train the model first!")
+        for lang, acc in results.items():
+            if isinstance(acc, float):
+                print(f"{lang:<15} | {acc:.4f}")
             else:
-                with st.spinner("Analyzing text..."):
-                    tagged_words = tag_sentence(
-                        user_input, 
-                        st.session_state.wordtypes, 
-                        st.session_state.emission_matrix, 
-                        st.session_state.transmission_matrix
-                    )
-                    st.session_state.tagged_results = tagged_words
+                print(f"{lang:<15} | {acc}")
         
-        # Display results
-        if 'tagged_results' in st.session_state and st.session_state.tagged_results:
-            st.markdown("<h3>Tagged Results:</h3>", unsafe_allow_html=True)
-            
-            # Visual representation of tagged words
-            html_output = "<div style='line-height: 2.5;'>"
-            for word, tag, description in st.session_state.tagged_results:
-                html_output += f"<div class='word-container'>{word} <span class='tag'>({tag})</span></div> "
-            html_output += "</div>"
-            
-            st.markdown(html_output, unsafe_allow_html=True)
-            
-            # Detailed table view
-            st.markdown("<h3>Detailed Analysis:</h3>", unsafe_allow_html=True)
-            
-            # Create a DataFrame for better display
-            df = pd.DataFrame(
-                [(word, tag, description) for word, tag, description in st.session_state.tagged_results],
-                columns=["Word", "POS Tag", "Description"]
-            )
-            
-            st.dataframe(df, use_container_width=True)
-            
-            # Visualization of tag distribution
-            st.markdown("<h3>Tag Distribution:</h3>", unsafe_allow_html=True)
-            
-            # Count tags
-            tag_counts = {}
-            for _, tag, _ in st.session_state.tagged_results:
-                tag_counts[tag] = tag_counts.get(tag, 0) + 1
-            
-            # Create DataFrame for visualization
-            tag_df = pd.DataFrame(list(tag_counts.items()), columns=["Tag", "Count"])
-            tag_df = tag_df.sort_values("Count", ascending=False)
-            
-            # Create bar chart
-            chart = alt.Chart(tag_df).mark_bar().encode(
-                x=alt.X('Tag', sort=None),
-                y='Count',
-                color=alt.Color('Tag', legend=None),
-                tooltip=['Tag', 'Count']
-            ).properties(
-                width=600,
-                height=400,
-                title="Distribution of POS Tags"
-            )
-            
-            st.altair_chart(chart, use_container_width=True)
-    
-    with tabs[1]:
-        st.markdown("<h2 class='sub-header'>POS Tag Information</h2>", unsafe_allow_html=True)
+    elif choice in languages:
+        selected_language = languages[choice]
+        print(f"\nSelected language: {selected_language['name']}")
         
-        # Display tag information in a table
-        tag_info = pd.DataFrame(
-            [(tag, tag_descriptions[tag]) for tag in tags],
-            columns=["Tag", "Description"]
-        )
+        # Train the model
+        train_start_time = time.time()
+        wordtypes, emission_matrix, transmission_matrix = train_model(selected_language['train'])
+        training_time = time.time() - train_start_time
+        print(f"Training completed in {training_time:.2f} seconds")
         
-        st.dataframe(tag_info, use_container_width=True)
+        # Estimate model accuracy
+        accuracy = estimate_accuracy(selected_language['train'])
+        print(f"Estimated model accuracy: {accuracy:.4f}")
         
-        # Add some explanatory text
-        st.markdown("""
-        <div class='highlight'>
-        <p>Parts of Speech (POS) tagging is the process of marking up words in text according to their grammatical categories. 
-        This helps in understanding the syntactic structure of sentences and is a fundamental step in many natural language processing tasks.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with tabs[2]:
-        st.markdown("<h2 class='sub-header'>Model Information</h2>", unsafe_allow_html=True)
+        # Interactive mode for user input
+        print("\n" + "="*80)
+        print(f"{selected_language['name']} POS Tagger Interactive Mode")
+        print("Enter a sentence to get POS tags. Type 'exit' to quit.")
+        print("="*80)
         
-        if 'wordtypes' in st.session_state and 'accuracy' in st.session_state:
-            # Display model statistics
-            st.markdown(f"""
-            <div class='highlight'>
-            <p><strong>Model Statistics:</strong></p>
-            <ul>
-                <li>Language: {selected_language}</li>
-                <li>Vocabulary Size: {len(st.session_state.wordtypes)} words</li>
-                <li>Estimated Accuracy: {st.session_state.accuracy:.2%}</li>
-                <li>Number of POS Tags: {len(tags)}</li>
-            </ul>
-            </div>
-            """, unsafe_allow_html=True)
+        while True:
+            user_input = input("\nEnter a sentence: ")
             
-            # Add explanation of the algorithm
-            st.markdown("""
-            <p><strong>Algorithm:</strong> This POS tagger uses a Hidden Markov Model (HMM) with the Viterbi algorithm. 
-            The model calculates two main probability matrices:</p>
-            <ul>
-                <li><strong>Emission Probabilities:</strong> The probability of a word given a specific tag</li>
-                <li><strong>Transmission Probabilities:</strong> The probability of transitioning from one tag to another</li>
-            </ul>
-            <p>The Viterbi algorithm finds the most likely sequence of tags for a given sentence by calculating the maximum probability path through these matrices.</p>
-            """, unsafe_allow_html=True)
-        else:
-            st.info("Train the model to see statistics and information.")
-    
-    # Footer
-    st.markdown("""
-    <div class='footer'>
-        <p>POS Tagger App</p>
-    </div>
-    """, unsafe_allow_html=True)
+            if user_input.lower() == 'exit':
+                print("Exiting program. Goodbye!")
+                break
+            
+            if not user_input.strip():
+                print("Please enter a valid sentence.")
+                continue
+            
+            # Get our model's tags
+            model_tagged = tag_sentence(user_input, wordtypes, emission_matrix, transmission_matrix)
+            
+            # Display the results in a formatted table
+            print("\nWord\t\tTag\t\tDescription")
+            print("-" * 60)
+            for word, tag, description in model_tagged:
+                # Adjust spacing based on word length
+                word_spacing = "\t\t" if len(word) < 8 else "\t"
+                tag_spacing = "\t\t" if len(tag) < 8 else "\t"
+                
+                print(f"{word}{word_spacing}{tag}{tag_spacing}{description}")
+    else:
+        print("Invalid choice. Exiting program.")
 
 if __name__ == "__main__":
-    # Initialize session state variables if they don't exist
-    if 'wordtypes' not in st.session_state:
-        st.session_state.wordtypes = []
-    if 'emission_matrix' not in st.session_state:
-        st.session_state.emission_matrix = [[]]
-    if 'transmission_matrix' not in st.session_state:
-        st.session_state.transmission_matrix = [[]]
-    if 'accuracy' not in st.session_state:
-        st.session_state.accuracy = 0.0
-    main()
+    try:
+        main()
+    except ImportError as error:
+        print(f"Couldn't find the module - {error}, kindly install before proceeding.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        print("Please make sure all required files exist in the current directory.")
